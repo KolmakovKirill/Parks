@@ -2,7 +2,6 @@ import requests
 
 def send_command_to_esp(ssid, zone, turn_on):
     try:
-        # Здесь адрес ESP, например, через IP
         url = f"http://{ssid}/zone/{zone}/"
         action = 'on' if turn_on else 'off'
         response = requests.post(url, json={"action": action}, timeout=5)
