@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Личный кабинет</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background-image: url("https://tur-kazan.ru/storage/5c53f7f02aa04.jpg");
+            background-position: relative;
+            background-repeat: no-repeat;
+            background-size: cover;
+            color: white;
+        }
+
+        .container {
+            background: rgba(0, 0, 0, 0.6);
+            margin: 50px auto;
+            padding: 30px;
+            max-width: 700px;
+            border-radius: 15px;
+        }
+
+        h1, h2 {
+            text-align: center;
+        }
+
+        .zone {
+            margin: 20px 0;
+            padding: 10px;
+            background: #222;
+            border-radius: 10px;
+        }
+
+        .zone-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .indicator {
+            font-weight: bold;
+            padding: 5px 10px;
+            border-radius: 5px;
+        }
+
+        .indicator.on {
+            background-color: #28a745;
+        }
+
+        .indicator.off {
+            background-color: #dc3545;
+        }
+
+        .zone button {
+            padding: 8px 15px;
+            font-size: 14px;
+            margin-left: 15px;
+        }
+
+        .logout-btn {
+            display: block;
+            margin: 30px auto 0;
+            padding: 10px 20px;
+            background: white;
+            color: red;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+
+        .service_btn {
+            display: block;
+            margin: 30px auto 0;
+            padding: 10px 20px;
+            background: white;
+            color: green;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+
+    </style>
+    <script>
+        function toggleZone(zoneNumber) {
+            const button = document.getElementById(`btn-${zoneNumber}`);
+            const indicator = document.getElementById(`ind-${zoneNumber}`);
+            const originalText = button.textContent;
+
+            button.disabled = true;
+            button.textContent = 'Ожидание...';
+
+            fetch(`/toggle_zone/${zoneNumber}/`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': '{{ csrf_token }}',
+                    'Content-Type': 'application/json'
+                },
+            }).then(response => {
+                return response.json();
+            }).then(data => {
+                if (data.status === 'ok') {
+                    // Индикация обновится через WebSocket или автообновление
+                } else {
+                    button.textContent = originalText;
+                }
+            }).catch(error => {
+                console.error('Ошибка:', error);
+                button.textContent = originalText;
+            }).finally(() => {
+                setTimeout(() => {
+                    button.textContent = originalText;
+                    button.disabled = false;
+                }, 30000);
+            });
+        }
+    </script>
+</head>
+<body>
+        <div class="container">
+            <h1>Добро пожаловать, {{ request.user.username }}!</h1>
+
+        {% if messages %}
+                {% for message in messages %}
+                        <p style="color: green;">{{ message }}</p>
+                {% endfor %}
+            {% endif %}
+
+        <h2>Контроллер:</h2>
+        <form method="post">
+            {% csrf_token %}
+            <label>SSID микроконтроллера:</label><br>
+            <input type="text" name="ssid" value="{{ userdata.ssid }}" required>
+            <button type="submit">Обновить</button>
+        </form>
+
+        <hr>
+
+
+            <h2>Состояние системы:</h2>
+            <a href="{% url 'system_logs' %}" style="color: lightblue; display: inline-block; margin-bottom: 20px;">Посмотреть логи</a>
+
+            {% for i in "123" %}
+            <div class="zone">
+                <div class="zone-header">
+                    <span>Зона света №{{ i }}</span>
+                    <span id="ind-{{ i }}" class="indicator {% if zones.i %}on{% else %}off{% endif %}">
+                        {% if zones.i %}ВКЛ{% else %}ВЫКЛ{% endif %}
+                    </span>
+                    <button id="btn-{{ i }}" onclick="toggleZone({{ i }})">
+                        {% if zones.i %}Выключить{% else %}Включить{% endif %}
+                    </button>
+                </div>
+            </div>
+            {% endfor %}
+
+            <form method="post" action="{% url 'enable_service_mode' %}" style="display: inline;">
+                {% csrf_token %}
+                <button type="submit" class="service_btn">Сервисный режим</button>
+            </form>
+
+            <form method="post" action="{% url 'logout' %}" style="display: inline;">
+                {% csrf_token %}
+                <button class="logout-btn" type="submit">Выйти</button>
+            </form>
+        </div>
+</body>
+</html>
