@@ -6,7 +6,7 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 import json
 from .esp_control import send_command_to_esp
-from .models import UserData  # модель, где хранится ssid
+from .models import UserData  
 from django.shortcuts import render
 from django.contrib.auth.decorators import login_required
 import requests
