@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import UserData, LightZone, SystemLog
+from .models import UserData, LightZone, SystemLog, ESP
 
 
 @admin.register(UserData)
@@ -19,3 +19,10 @@ class SystemLogAdmin(admin.ModelAdmin):
     list_filter = ('zone_number', 'action', 'user')
     search_fields = ('user__username', 'zone_number')
     ordering = ('-timestamp',)
+
+
+@admin.register(ESP)
+class ESPAdmin(admin.ModelAdmin):
+    list_display = ('user', 'ssid', 'ip_address')
+    list_filter = ('user',)
+    search_fields = ('ip',)

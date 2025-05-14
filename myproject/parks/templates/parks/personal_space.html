@@ -1,169 +1,133 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-    <meta charset="UTF-8">
-    <title>Личный кабинет</title>
-    <style>
-        body {
-            margin: 0;
-            font-family: Arial, sans-serif;
-            background-image: url("https://tur-kazan.ru/storage/5c53f7f02aa04.jpg");
-            background-position: relative;
-            background-repeat: no-repeat;
-            background-size: cover;
-            color: white;
-        }
+from django.shortcuts import render, redirect
+from django.contrib.auth import authenticate, login, logout
+from .models import LightZone, SystemLog
+from django.contrib import messages
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+import json
+from .esp_control import send_command_to_esp
+from .models import UserData
+from django.shortcuts import render
+from django.contrib.auth.decorators import login_required
+import requests
 
-        .container {
-            background: rgba(0, 0, 0, 0.6);
-            margin: 50px auto;
-            padding: 30px;
-            max-width: 700px;
-            border-radius: 15px;
-        }
+def login_view(request):
+    if request.method == 'POST':
+        username = request.POST.get('username')
+        password = request.POST.get('password')
 
-        h1, h2 {
-            text-align: center;
-        }
+        user = authenticate(request, username=username, password=password)
+        if user is not None:
+            login(request, user)
+            return redirect('personal_space')
+        else:
+            return render(request, 'parks/login.html', {'error': 'Неверный логин или пароль'})
 
-        .zone {
-            margin: 20px 0;
-            padding: 10px;
-            background: #222;
-            border-radius: 10px;
-        }
-
-        .zone-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .indicator {
-            font-weight: bold;
-            padding: 5px 10px;
-            border-radius: 5px;
-        }
-
-        .indicator.on {
-            background-color: #28a745;
-        }
-
-        .indicator.off {
-            background-color: #dc3545;
-        }
-
-        .zone button {
-            padding: 8px 15px;
-            font-size: 14px;
-            margin-left: 15px;
-        }
-
-        .logout-btn {
-            display: block;
-            margin: 30px auto 0;
-            padding: 10px 20px;
-            background: white;
-            color: red;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-        }
-
-        .service_btn {
-            display: block;
-            margin: 30px auto 0;
-            padding: 10px 20px;
-            background: white;
-            color: green;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-        }
-
-    </style>
-    <script>
-        function toggleZone(zoneNumber) {
-            const button = document.getElementById(`btn-${zoneNumber}`);
-            const indicator = document.getElementById(`ind-${zoneNumber}`);
-            const originalText = button.textContent;
-
-            button.disabled = true;
-            button.textContent = 'Ожидание...';
-
-            fetch(`/toggle_zone/${zoneNumber}/`, {
-                method: 'POST',
-                headers: {
-                    'X-CSRFToken': '{{ csrf_token }}',
-                    'Content-Type': 'application/json'
-                },
-            }).then(response => {
-                return response.json();
-            }).then(data => {
-                if (data.status === 'ok') {
-                    // Индикация обновится через WebSocket или автообновление
-                } else {
-                    button.textContent = originalText;
-                }
-            }).catch(error => {
-                console.error('Ошибка:', error);
-                button.textContent = originalText;
-            }).finally(() => {
-                setTimeout(() => {
-                    button.textContent = originalText;
-                    button.disabled = false;
-                }, 30000);
-            });
-        }
-    </script>
-</head>
-<body>
-        <div class="container">
-            <h1>Добро пожаловать, {{ request.user.username }}!</h1>
-
-        {% if messages %}
-                {% for message in messages %}
-                        <p style="color: green;">{{ message }}</p>
-                {% endfor %}
-            {% endif %}
-
-        <h2>Контроллер:</h2>
-        <form method="post">
-            {% csrf_token %}
-            <label>SSID микроконтроллера:</label><br>
-            <input type="text" name="ssid" value="{{ userdata.ssid }}" required>
-            <button type="submit">Обновить</button>
-        </form>
-
-        <hr>
+    return render(request, 'parks/login.html')
 
 
-            <h2>Состояние системы:</h2>
-            <a href="{% url 'system_logs' %}" style="color: lightblue; display: inline-block; margin-bottom: 20px;">Посмотреть логи</a>
+@login_required
+def personal_space_view(request):
+    userdata = request.user.userdata
+    zones = LightZone.objects.filter(user=request.user)  # Добавлено получение зон
 
-            {% for i in "123" %}
-            <div class="zone">
-                <div class="zone-header">
-                    <span>Зона света №{{ i }}</span>
-                    <span id="ind-{{ i }}" class="indicator {% if zones.i %}on{% else %}off{% endif %}">
-                        {% if zones.i %}ВКЛ{% else %}ВЫКЛ{% endif %}
-                    </span>
-                    <button id="btn-{{ i }}" onclick="toggleZone({{ i }})">
-                        {% if zones.i %}Выключить{% else %}Включить{% endif %}
-                    </button>
-                </div>
-            </div>
-            {% endfor %}
+    if request.method == 'POST':
+        ssid = request.POST.get('ssid')
+        if ssid:
+            userdata.ssid = ssid
+            userdata.save()
+            messages.success(request, "SSID обновлён.")
 
-            <form method="post" action="{% url 'enable_service_mode' %}" style="display: inline;">
-                {% csrf_token %}
-                <button type="submit" class="service_btn">Сервисный режим</button>
-            </form>
+    return render(request, 'parks/personal_space.html', {'userdata': userdata, 'zones': zones})
 
-            <form method="post" action="{% url 'logout' %}" style="display: inline;">
-                {% csrf_token %}
-                <button class="logout-btn" type="submit">Выйти</button>
-            </form>
-        </div>
-</body>
-</html>
+
+def logout_view(request):
+    logout(request)
+    return redirect('login')
+
+@csrf_exempt
+def esp_update_status(request):
+    if request.method == 'POST':
+        try:
+            body = json.loads(request.body)
+            ssid = body.get('ssid')
+            data = body.get('status')
+
+            user_data = UserData.objects.get(ssid=ssid)
+            user_data.data = data
+            user_data.save()
+            return JsonResponse({'status': 'ok'})
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=400)
+
+    return JsonResponse({'error': 'Only POST allowed'}, status=405)
+
+@csrf_exempt
+@login_required
+def toggle_zone(request, zone_id):
+    zone = LightZone.objects.get(id=zone_id, user=request.user)
+    esp_ip = zone.esp.ip_address
+
+    action = 'off' if zone.is_on else 'on'
+    url = f"http://{esp_ip}/{action}"
+
+    try:
+        response = requests.get(url, timeout=5)
+        if response.status_code == 200:
+            zone.is_on = not zone.is_on
+            zone.save()
+            messages.success(request, f"Зона {zone.zone_number} успешно {'включена' if zone.is_on else 'выключена'}")
+        else:
+            messages.error(request, "ESP не ответил должным образом.")
+    except requests.RequestException:
+        messages.error(request, "Ошибка при подключении к ESP.")
+
+    return redirect('personal_space')
+
+def cabinet(request):
+    userdata = UserData.objects.get(user=request.user)
+    zones = LightZone.objects.filter(user=request.user)
+
+    return render(request, 'parks/personal_space.html', {
+        'userdata': userdata,
+        'zones': zones,
+    })
+
+@login_required
+def system_logs(request):
+    logs = SystemLog.objects.filter(user=request.user).order_by('-timestamp')
+    return render(request, 'parks/logs.html', {'logs': logs})
+
+ESP_COMMAND_TIMEOUT = 5  # секунд
+
+@login_required
+def enable_service_mode(request):
+    if request.method == 'POST':
+        zones = LightZone.objects.filter(user=request.user)
+        failed_zones = []
+
+        for zone in zones:
+            try:
+                esp_url = f"http://{request.user.userdata.ssid}/zone/{zone.zone_number}/on"
+                response = requests.get(esp_url, timeout=ESP_COMMAND_TIMEOUT)
+
+                if response.status_code == 200 and 'OK' in response.text:
+                    zone.is_on = True
+                    zone.save()
+                    SystemLog.objects.create(
+                        user=request.user,
+                        zone_number=zone.zone_number,
+                        action='on'
+                    )
+                else:
+                    failed_zones.append(zone.zone_number)
+
+            except Exception:
+                failed_zones.append(zone.zone_number)
+
+        if failed_zones:
+            messages.error(request, f"Ошибка включения зон: {', '.join(map(str, failed_zones))}")
+        else:
+            messages.success(request, "Сервисный режим активирован: все зоны включены.")
+
+        return redirect('personal_space')

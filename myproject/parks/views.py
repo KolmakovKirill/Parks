@@ -114,7 +114,7 @@ def enable_service_mode(request):
 
         for zone in zones:
             try:
-                esp_url = f"http://{request.user.userdata.ssid}/zone/{zone.zone_number}/on"
+                esp_url = f"http://{zone.esp_address}/zone/{zone.zone_number}/on"
                 response = requests.get(esp_url, timeout=ESP_COMMAND_TIMEOUT)
 
                 if response.status_code == 200 and 'OK' in response.text:
