@@ -63,32 +63,30 @@ def esp_update_status(request):
 
 @csrf_exempt
 @login_required
-def toggle_zone(request, zone_number):
-    if request.method != 'POST':
-        return JsonResponse({'status': 'error', 'message': 'Invalid request'}, status=400)
+def toggle_zone(request, zone_id):
+    zone = LightZone.objects.get(id=zone_id, user=request.user)
+    esp_ip = zone.esp.ip_address
+
+    action = 'off' if zone.is_on else 'on'
+    url = f"http://{esp_ip}/{action}"
 
     try:
-        zone_number = int(zone_number)
-        zone, _ = LightZone.objects.get_or_create(user=request.user, zone_number=zone_number)
-
-        new_state = not zone.is_on
-
-        ssid = UserData.objects.get(user=request.user).ssid
-        success = send_command_to_esp(ssid, zone_number, new_state)
-
-        if success:
-            zone.is_on = new_state
+        response = requests.get(url, timeout=5)
+        if response.status_code == 200:
+            zone.is_on = not zone.is_on
             zone.save()
             SystemLog.objects.create(
                 user=request.user,
-                zone_number=zone_number,
-                action='on' if new_state else 'off'
+                zone_number=zone.zone_number,
+                action='on' if zone.is_on else 'off'
             )
-            return JsonResponse({'status': 'ok', 'new_state': zone.is_on})
+            messages.success(request, f"Зона {zone.zone_number} успешно {'включена' if zone.is_on else 'выключена'}")
         else:
-            return JsonResponse({'status': 'error', 'message': 'ESP не ответил'}, status=500)
-    except Exception as e:
-        return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+            messages.error(request, "ESP не ответил должным образом.")
+    except requests.RequestException:
+        messages.error(request, "Ошибка при подключении к ESP.")
+
+    return redirect('personal_space')
 
 def cabinet(request):
     userdata = UserData.objects.get(user=request.user)
